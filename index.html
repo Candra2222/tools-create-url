@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Cloudflare Pages Deploy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  background:#0f172a;
+  font-family:Arial;
+  color:white;
+}
+.box {
+  max-width:480px;
+  margin:40px auto;
+  background:#020617;
+  padding:20px;
+  border-radius:12px;
+}
+textarea,input,button {
+  width:100%;
+  margin-top:10px;
+  padding:10px;
+  border-radius:8px;
+}
+button {
+  background:#2563eb;
+  color:white;
+  border:none;
+  cursor:pointer;
+}
+.footer {
+  text-align:center;
+  margin-top:20px;
+  opacity:.6;
+}
+</style>
+</head>
+<body>
+
+<div class="box">
+  <h3>Cloudflare Pages Deploy</h3>
+
+  <textarea id="html"><h1>HELLO CLOUDFLARE</h1></textarea>
+
+  <button onclick="deploy()">DEPLOY</button>
+
+  <input id="out" readonly placeholder="URL hasil deploy">
+
+  <button onclick="copy()">SALIN LINK</button>
+
+  <div class="footer">tools by sesepuh © 2026</div>
+</div>
+
+<script>
+async function deploy() {
+  const html = document.getElementById('html').value
+
+  const res = await fetch('/api/deploy', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ html })
+  })
+
+  const data = await res.json()
+  document.getElementById('out').value = data.url || 'GAGAL'
+}
+
+function copy(){
+  navigator.clipboard.writeText(
+    document.getElementById('out').value
+  )
+  alert('Disalin!')
+}
+</script>
+
+</body>
+</html>
