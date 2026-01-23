@@ -3,5 +3,5 @@ main = "worker/worker.js"
 compatibility_date = "2027-12-01"
 
 kv_namespaces = [
-  { binding = "LINKS", id = "ISI_DENGAN_KV_ID" }
+  { binding = "LINKS", id = "5bff0d3008a9d2d68bac43bb5906c768" }
 ]
