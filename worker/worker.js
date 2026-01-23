@@ -4,21 +4,30 @@ export default {
 
     /* =========================
        CORS
-       ========================= */
+    ========================= */
     if (req.method === "OPTIONS") {
       return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
+        headers: cors(),
       });
     }
 
-    const jsonHeader = {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    };
+    /* =========================
+       API: LIST REPO GITHUB
+       ========================= */
+    if (url.pathname === "/api/github") {
+      const gh = await fetch(
+        `https://api.github.com/users/${env.GITHUB_USER}/repos?per_page=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+            "User-Agent": "cf-worker",
+            Accept: "application/vnd.github+json",
+          },
+        }
+      );
+
+      return json(await gh.json());
+    }
 
     /* =========================
        API: CREATE LINK
@@ -27,10 +36,7 @@ export default {
       const body = await req.json();
 
       if (!body.repoFullName) {
-        return new Response(
-          JSON.stringify({ error: "repoFullName kosong" }),
-          { headers: jsonHeader }
-        );
+        return json({ error: "repoFullName kosong" }, 400);
       }
 
       const id = crypto.randomUUID().slice(0, 8);
@@ -43,10 +49,7 @@ export default {
         })
       );
 
-      return new Response(
-        JSON.stringify({ url: `${url.origin}/${id}` }),
-        { headers: jsonHeader }
-      );
+      return json({ url: `${url.origin}/${id}` });
     }
 
     /* =========================
@@ -56,9 +59,7 @@ export default {
     if (!slug) return new Response("OK");
 
     const data = await env.LINKS.get(slug);
-    if (!data) {
-      return new Response("404 NOT FOUND", { status: 404 });
-    }
+    if (!data) return new Response("404 NOT FOUND", { status: 404 });
 
     const cfg = JSON.parse(data);
 
@@ -69,24 +70,21 @@ export default {
     const r = await fetch(raw);
 
     if (!r.ok) {
-      return new Response("index.html tidak ditemukan di repo", {
-        status: 404,
-      });
+      return new Response("index.html tidak ditemukan", { status: 404 });
     }
 
     let html = await r.text();
 
     /* =========================
-       IMAGE INJECT (FIX TOTAL)
+       IMAGE INJECT + ROTATOR
        ========================= */
-    if (cfg.images && cfg.images.length) {
+    if (cfg.images?.length) {
       html = html.replace(
         /<body([^>]*)>/i,
         `<body$1>
-<div id="__inject_wrap" style="text-align:center;position:relative;z-index:999999">
-  <img id="__inject_img"
-       src="${cfg.images[0]}"
-       style="max-width:100%;height:auto;display:block;margin:auto;">
+<div style="text-align:center;position:relative;z-index:999999">
+  <img id="__inject_img" src="${cfg.images[0]}"
+       style="max-width:100%;height:auto;margin:auto;display:block;">
 </div>`
       );
 
@@ -94,30 +92,47 @@ export default {
         html = html.replace(
           /<\/body>/i,
           `<script>
-(() => {
+(()=> {
   const imgs = ${JSON.stringify(cfg.images)};
   let i = 0;
   const img = document.getElementById('__inject_img');
-  if (!img) return;
-  setInterval(() => {
-    i = (i + 1) % imgs.length;
+  if(!img) return;
+  setInterval(()=>{
+    i = (i+1) % imgs.length;
     img.src = imgs[i];
-  }, 3000);
+  },3000);
 })();
-</script>
-</body>`
+</script></body>`
         );
       }
     }
 
-    /* =========================
-       RETURN HTML
-       ========================= */
     return new Response(html, {
       headers: {
         "Content-Type": "text/html",
-        "Access-Control-Allow-Origin": "*",
+        ...cors(),
       },
     });
   },
 };
+
+/* =========================
+   HELPERS
+========================= */
+function cors() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...cors(),
+    },
+  });
+}
