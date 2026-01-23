@@ -2,6 +2,21 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
 
+    /* ===== CORS / PREFLIGHT ===== */
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
+      });
+    }
+
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*"
+    };
+
     /* =========================
        API: AMBIL SEMUA REPO
        ========================= */
@@ -11,13 +26,17 @@ export default {
         {
           headers: {
             Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-            "User-Agent": "cf-worker"
+            "User-Agent": "cf-worker",
+            Accept: "application/vnd.github+json"
           }
         }
       );
 
       return new Response(await gh.text(), {
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders
+        }
       });
     }
 
@@ -39,7 +58,7 @@ export default {
 
       return json({
         url: `${url.origin}/${id}`
-      });
+      }, 200, corsHeaders);
     }
 
     /* =========================
@@ -59,15 +78,23 @@ export default {
 
     /* =========================
        LOAD HTML DARI REPO
+       (MAIN → MASTER FALLBACK)
        ========================= */
-    const raw = `https://raw.githubusercontent.com/${cfg.repo}/main/index.html`;
-    const r = await fetch(raw);
+    const branches = ["main", "master"];
+    let html = null;
 
-    if (!r.ok) {
-      return new Response("index.html tidak ditemukan di repo", { status: 404 });
+    for (const b of branches) {
+      const raw = `https://raw.githubusercontent.com/${cfg.repo}/${b}/index.html`;
+      const r = await fetch(raw);
+      if (r.ok) {
+        html = await r.text();
+        break;
+      }
     }
 
-    let html = await r.text();
+    if (!html) {
+      return new Response("index.html tidak ditemukan di repo", { status: 404 });
+    }
 
     /* =========================
        GANTI IMAGE + ROTATOR
@@ -97,18 +124,21 @@ export default {
       }
     }
 
-    /* =========================
-       REDIRECT (PAKAI SCRIPT DI REPO)
-       ========================= */
     return new Response(html, {
-      headers: { "Content-Type": "text/html" }
+      headers: {
+        "Content-Type": "text/html",
+        ...corsHeaders
+      }
     });
   }
 };
 
-function json(data, status = 200) {
+function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json",
+      ...headers
+    }
   });
 }
