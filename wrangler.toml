@@ -1,4 +1,4 @@
-name = "tool-create-url"
+name = "tools-create-url"
 main = "worker/worker.js"
 compatibility_date = "2027-12-01"
 
