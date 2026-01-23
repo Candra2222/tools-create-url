@@ -1,0 +1,7 @@
+name = "tool-create-url"
+main = "worker/worker.js"
+compatibility_date = "2027-12-01"
+
+kv_namespaces = [
+  { binding = "LINKS", id = "ISI_DENGAN_KV_ID" }
+]
