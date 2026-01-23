@@ -1,3 +1,3 @@
 name = "generate"
 main = "worker/worker.js"
-compatibility_date = "2026-12-01"
+compatibility_date = "2026-01-01"
