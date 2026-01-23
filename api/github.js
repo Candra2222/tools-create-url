@@ -1,13 +1,63 @@
-export default async function handler(req, res) {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) return res.status(500).json({ error: 'GITHUB_TOKEN_MISSING' });
+export async function onRequest(context) {
+  const { request, env } = context;
 
-  const r = await fetch('https://api.github.com/user/repos', {
+  // ================= CORS =================
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: cors()
+    });
+  }
+
+  // ================= TOKEN CHECK =================
+  if (!env.GITHUB_TOKEN) {
+    return json({ error: 'GITHUB_TOKEN belum diset' }, 500);
+  }
+
+  try {
+    const r = await fetch(
+      'https://api.github.com/user/repos?per_page=100',
+      {
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+          'User-Agent': 'cf-pages',
+          Accept: 'application/vnd.github+json'
+        }
+      }
+    );
+
+    const d = await r.json();
+
+    // 🔒 FIX UTAMA: PAKSA ARRAY
+    if (!Array.isArray(d)) {
+      return json([]);
+    }
+
+    return json(
+      d.map(repo => ({
+        full_name: repo.full_name
+      }))
+    );
+  } catch (e) {
+    return json({ error: e.message }, 500);
+  }
+}
+
+/* ================= HELPER ================= */
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
     headers: {
-      Authorization: `Bearer ${token}`,
-      'User-Agent': 'vercel-app'
+      'Content-Type': 'application/json',
+      ...cors()
     }
   });
-  const data = await r.json();
-  res.json(data.map(x => ({ full_name: x.full_name })));
+}
+
+function cors() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
 }
