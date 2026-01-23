@@ -2,119 +2,92 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
 
-    /* =========================
-       API: AMBIL SEMUA REPO
-       ========================= */
-    if (url.pathname === "/api/github") {
-      const gh = await fetch(
-        "https://api.github.com/user/repos?per_page=100",
-        {
-          headers: {
-            Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-            "User-Agent": "cf-worker"
-          }
-        }
-      );
-
-      return new Response(await gh.text(), {
-        headers: { "Content-Type": "application/json" }
+    /* ===============================
+       CORS
+    =============================== */
+    if (req.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: cors()
       });
     }
 
-    /* =========================
-       API: CREATE LINK
-       ========================= */
-    if (url.pathname === "/api/create" && req.method === "POST") {
-      const body = await req.json();
+    /* ===============================
+       LOAD GITHUB REPO
+       /api/github
+    =============================== */
+    if (url.pathname === '/api/github') {
+      try {
+        const r = await fetch('https://api.github.com/user/repos?per_page=100', {
+          headers: {
+            Authorization: `token ${env.GITHUB_TOKEN}`,
+            'User-Agent': 'cf-worker'
+          }
+        });
 
-      const id = crypto.randomUUID().slice(0, 8);
+        const d = await r.json();
 
-      await env.LINKS.put(
-        id,
-        JSON.stringify({
-          repo: body.repoFullName,
-          images: Array.isArray(body.images) ? body.images : []
-        })
-      );
+        // 🔒 PENTING: PAKSA ARRAY
+        if (!Array.isArray(d)) {
+          return json([]);
+        }
 
-      return json({ url: `${url.origin}/${id}` });
-    }
-
-    /* =========================
-       LOAD SLUG
-       ========================= */
-    const slug = url.pathname.slice(1);
-    if (!slug) return new Response("OK");
-
-    const data = await env.LINKS.get(slug);
-    if (!data) return new Response("404 NOT FOUND", { status: 404 });
-
-    const cfg = JSON.parse(data);
-
-    /* =========================
-       LOAD HTML DARI REPO
-       ========================= */
-    const raw = `https://raw.githubusercontent.com/${cfg.repo}/main/index.html`;
-    const r = await fetch(raw);
-
-    if (!r.ok) {
-      return new Response("index.html tidak ditemukan di repo", { status: 404 });
-    }
-
-    let html = await r.text();
-
-    /* =========================
-       INJECT IMAGE (FIX AMAN)
-       ========================= */
-    if (cfg.images.length) {
-      html = html.replace(
-        /<body([^>]*)>/i,
-        `<body$1>
-<div id="__cf_img_wrap" style="
-  text-align:center;
-  position:relative;
-  z-index:999999;
-">
-  <img id="__cf_img"
-       src="${cfg.images[0]}"
-       style="max-width:100%;height:auto;display:block;margin:auto;">
-</div>
-`
-      );
-
-      if (cfg.images.length > 1) {
-        html = html.replace(
-          /<\/body>/i,
-          `
-<script>
-(() => {
-  const imgs = ${JSON.stringify(cfg.images)};
-  let i = 0;
-  const img = document.getElementById("__cf_img");
-  if (!img) return;
-  setInterval(() => {
-    i = (i + 1) % imgs.length;
-    img.src = imgs[i];
-  }, 3000);
-})();
-</script>
-</body>`
-        );
+        return json(d.map(x => ({
+          full_name: x.full_name
+        })));
+      } catch (e) {
+        return json([]);
       }
     }
 
-    /* =========================
-       RETURN HTML
-       ========================= */
-    return new Response(html, {
-      headers: { "Content-Type": "text/html" }
-    });
+    /* ===============================
+       CREATE / DEPLOY
+       /api/create
+    =============================== */
+    if (url.pathname === '/api/create' && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        const repo = body.repoFullName;
+        const images = body.images || [];
+
+        if (!repo) {
+          return json({ error: 'Repo kosong' }, 400);
+        }
+
+        // 🔗 link hasil (contoh)
+        const rand = Math.random().toString(36).slice(2, 8);
+        const link = `https://${repo.replace('/', '-')}-${rand}.pages.dev`;
+
+        return json({
+          url: link,
+          repo,
+          images
+        });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
+    return new Response('Not Found', { status: 404 });
   }
 };
 
+/* ===============================
+   HELPER
+=============================== */
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data, null, 2), {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      'Content-Type': 'application/json',
+      ...cors()
+    }
   });
+}
+
+function cors() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+  };
 }
